@@ -13,3 +13,4 @@ F1-4: mode color added (readability OK), aesthetics TBD
 - v2.5 実機UIを再参照し、キーは 1U / 2U のみで成立する設計だと再確認
 - 「2Uを最大サイズとする」キーサイズ制約をロック
 - 本日は設計整理までで終了（実装は次回）
+2026-01-11 KeypadArea: key layout locked (1U/2U, labels & font rules)

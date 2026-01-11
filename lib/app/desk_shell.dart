@@ -1,42 +1,15 @@
 // lib/app/desk_shell.dart
 // 根拠: Kimix v3.0 Flutter移行 ― 作業手順書 v1(通勤対応)🔐
 // Phase F1-3: TopBar統合（Live/Blind二重表示の解消）
-// + 文脈保持: 作業文脈(Live/Blind) と 表示文脈(Ch/Fader) を分離・保持
+// Phase F1-4: モード色で「実行中モード」判別（暫定）
+// Phase F2-2: DeskShell state を DeskContextVM に集約（挙動維持）
+// Phase F2-3: 画面分割テンプレ導入 + Ch墓石スタブ建設
 
 import 'dart:async';
 import 'package:flutter/material.dart';
-
-/// 大モード（全部モード移動）
-enum DeskMode {
-  live,
-  blind,
-  effect,
-  sub,
-  setting,
-}
-
-/// 作業文脈（Effect/Sub/Setting に行っても保持される）
-enum WorkWorld {
-  live,
-  blind,
-}
-
-/// Live/Blind 内の表示文脈（2択でロック）
-enum WorldView {
-  ch,
-  fader,
-}
-
-@immutable
-class WorldContext {
-  const WorldContext({required this.view});
-
-  final WorldView view;
-
-  WorldContext copyWith({WorldView? view}) {
-    return WorldContext(view: view ?? this.view);
-  }
-}
+import 'desk_context_vm.dart';
+import '../ui/desk_main_area.dart';
+import '../ui/keypad_area.dart';
 
 class DeskShell extends StatefulWidget {
   const DeskShell({super.key});
@@ -46,15 +19,13 @@ class DeskShell extends StatefulWidget {
 }
 
 class _DeskShellState extends State<DeskShell> {
-  // ===== 層A: 現在の大モード =====
-  DeskMode mode = DeskMode.live;
-
-  // ===== 層B: 最後の作業文脈（Live/Blind） =====
-  WorkWorld lastWorkWorld = WorkWorld.live;
-
-  // ===== 層C: Live/Blind それぞれの表示文脈（独立記憶） =====
-  WorldContext liveCtx = const WorldContext(view: WorldView.fader);
-  WorldContext blindCtx = const WorldContext(view: WorldView.ch);
+  // ===== 状態はVMに集約（挙動維持） =====
+  DeskContextVM vm = const DeskContextVM(
+    mode: DeskMode.live,
+    lastWorkWorld: WorkWorld.live,
+    liveCtx: WorldContext(view: WorldView.fader),
+    blindCtx: WorldContext(view: WorldView.ch),
+  );
 
   late final Timer _clockTimer;
   String _clockText = _formatClock(DateTime.now());
@@ -82,32 +53,24 @@ class _DeskShellState extends State<DeskShell> {
     return '$hh:$mm';
   }
 
-  // ===== Mode selection (single entry point) =====
   void _selectMode(DeskMode m) {
     setState(() {
-      mode = m;
-
-      // Live/Blind は作業文脈そのものなので、移動したら lastWorkWorld を更新
-      if (m == DeskMode.live) lastWorkWorld = WorkWorld.live;
-      if (m == DeskMode.blind) lastWorkWorld = WorkWorld.blind;
-
-      // Effect/Sub/Setting は「表示の移動」であり、作業文脈は保持
-      // （ここでは lastWorkWorld を触らない）
+      var next = vm.copyWith(mode: m);
+      if (m == DeskMode.live) next = next.copyWith(lastWorkWorld: WorkWorld.live);
+      if (m == DeskMode.blind) next = next.copyWith(lastWorkWorld: WorkWorld.blind);
+      vm = next;
     });
   }
 
-  // ===== View switching inside world (independent memory) =====
   void _setWorldView(WorkWorld world, WorldView view) {
     setState(() {
       if (world == WorkWorld.live) {
-        liveCtx = liveCtx.copyWith(view: view);
+        vm = vm.copyWith(liveCtx: vm.liveCtx.copyWith(view: view));
       } else {
-        blindCtx = blindCtx.copyWith(view: view);
+        vm = vm.copyWith(blindCtx: vm.blindCtx.copyWith(view: view));
       }
     });
   }
-
-  WorldContext _ctxFor(WorkWorld w) => (w == WorkWorld.live) ? liveCtx : blindCtx;
 
   @override
   Widget build(BuildContext context) {
@@ -116,19 +79,25 @@ class _DeskShellState extends State<DeskShell> {
         child: Column(
           children: [
             _TopBar(
-              mode: mode,
+              mode: vm.mode,
               onSelectMode: _selectMode,
               clockText: _clockText,
+              lastWorkWorld: vm.lastWorkWorld,
             ),
+
+            // Middle: MainArea (Ch/Fader + Cue/CmdLine)
             Expanded(
-              child: _MainAreaStub(
-                mode: mode,
-                lastWorkWorld: lastWorkWorld,
-                liveCtx: liveCtx,
-                blindCtx: blindCtx,
+              child: DeskMainArea(
+                mode: vm.mode,
+                lastWorkWorld: vm.lastWorkWorld,
+                liveCtx: vm.liveCtx,
+                blindCtx: vm.blindCtx,
                 onSetWorldView: _setWorldView,
               ),
             ),
+
+            // Bottom: 10Key (stub)
+            const KeypadArea(),
           ],
         ),
       ),
@@ -141,11 +110,13 @@ class _TopBar extends StatelessWidget {
     required this.mode,
     required this.onSelectMode,
     required this.clockText,
+    required this.lastWorkWorld,
   });
 
   final DeskMode mode;
   final ValueChanged<DeskMode> onSelectMode;
   final String clockText;
+  final WorkWorld lastWorkWorld;
 
   @override
   Widget build(BuildContext context) {
@@ -169,7 +140,10 @@ class _TopBar extends StatelessWidget {
             ),
           ),
           const SizedBox(width: 12),
-          _RightStatus(clockText: clockText),
+          _RightStatus(
+            clockText: clockText,
+            lastWorkWorld: lastWorkWorld,
+          ),
         ],
       ),
     );
@@ -201,43 +175,96 @@ class _ModeTabs extends StatelessWidget {
   final DeskMode mode;
   final ValueChanged<DeskMode> onSelect;
 
+  static Color _modeColor(DeskMode m) {
+    // 仮色（美学は後でルールロックしてから詰める）
+    switch (m) {
+      case DeskMode.live:
+        return Colors.red;
+      case DeskMode.blind:
+        return Colors.blue;
+      case DeskMode.effect:
+        return Colors.purple;
+      case DeskMode.sub:
+        return Colors.green;
+      case DeskMode.setting:
+        return Colors.orange;
+    }
+  }
+
+  static String _label(DeskMode m) {
+    switch (m) {
+      case DeskMode.live:
+        return 'Live';
+      case DeskMode.blind:
+        return 'Blind';
+      case DeskMode.effect:
+        return 'Effect';
+      case DeskMode.sub:
+        return 'Sub';
+      case DeskMode.setting:
+        return 'Setting';
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return Wrap(
       spacing: 6,
       children: [
-        _chip('Live', DeskMode.live),
-        _chip('Blind', DeskMode.blind),
-        _chip('Effect', DeskMode.effect),
-        _chip('Sub', DeskMode.sub),
-        _chip('Setting', DeskMode.setting),
+        _chip(DeskMode.live),
+        _chip(DeskMode.blind),
+        _chip(DeskMode.effect),
+        _chip(DeskMode.sub),
+        _chip(DeskMode.setting),
       ],
     );
   }
 
-  Widget _chip(String label, DeskMode value) {
+  Widget _chip(DeskMode value) {
     final selected = mode == value;
+    final c = _modeColor(value);
+
     return ChoiceChip(
-      label: Text(label),
+      label: Text(_label(value)),
       selected: selected,
       onSelected: (_) => onSelect(value),
+      selectedColor: c.withOpacity(0.85),
+      backgroundColor: Colors.transparent,
+      labelStyle: TextStyle(
+        fontWeight: FontWeight.w700,
+        color: selected ? Colors.white : c,
+      ),
+      shape: StadiumBorder(
+        side: BorderSide(
+          color: c,
+          width: selected ? 2.0 : 1.0,
+        ),
+      ),
+      materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+      visualDensity: const VisualDensity(horizontal: -1, vertical: -1),
     );
   }
 }
 
 class _RightStatus extends StatelessWidget {
-  const _RightStatus({required this.clockText});
+  const _RightStatus({
+    required this.clockText,
+    required this.lastWorkWorld,
+  });
 
   final String clockText;
+  final WorkWorld lastWorkWorld;
 
   @override
   Widget build(BuildContext context) {
+    final ww = (lastWorkWorld == WorkWorld.live) ? 'LIVE' : 'BLIND';
     return Wrap(
       spacing: 6,
       children: [
         _pill('Saved*'),
         _pill('Online'),
         _pill('DMX'),
+        _pill('WW:$ww'),
         _pill(clockText),
       ],
     );
@@ -253,107 +280,6 @@ class _RightStatus extends StatelessWidget {
       child: Text(
         text,
         style: const TextStyle(fontSize: 12),
-      ),
-    );
-  }
-}
-
-class _MainAreaStub extends StatelessWidget {
-  const _MainAreaStub({
-    required this.mode,
-    required this.lastWorkWorld,
-    required this.liveCtx,
-    required this.blindCtx,
-    required this.onSetWorldView,
-  });
-
-  final DeskMode mode;
-  final WorkWorld lastWorkWorld;
-  final WorldContext liveCtx;
-  final WorldContext blindCtx;
-  final void Function(WorkWorld world, WorldView view) onSetWorldView;
-
-  String _modeLabel(DeskMode m) => switch (m) {
-        DeskMode.live => 'Live',
-        DeskMode.blind => 'Blind',
-        DeskMode.effect => 'Effect',
-        DeskMode.sub => 'Sub',
-        DeskMode.setting => 'Setting',
-      };
-
-  String _worldLabel(WorkWorld w) => (w == WorkWorld.live) ? 'LIVE' : 'BLIND';
-
-  String _viewLabel(WorldView v) => (v == WorldView.fader) ? 'FADER' : 'CH';
-
-  @override
-  Widget build(BuildContext context) {
-    final currentModeText = _modeLabel(mode);
-
-    // 作業文脈（Effect/Sub/Setting中でも保持される）
-    final workWorldText = _worldLabel(lastWorkWorld);
-
-    // 作業文脈側の表示文脈（Live/Blind で独立記憶）
-    final activeCtx = (lastWorkWorld == WorkWorld.live) ? liveCtx : blindCtx;
-    final activeViewText = _viewLabel(activeCtx.view);
-
-    final inWorldMode = (mode == DeskMode.live || mode == DeskMode.blind);
-    final currentWorld = (mode == DeskMode.live) ? WorkWorld.live : WorkWorld.blind;
-
-    // 画面が Live/Blind のときは、その世界線の view を直接切替できる（stub UI）
-    final ctxForCurrentWorld = (currentWorld == WorkWorld.live) ? liveCtx : blindCtx;
-
-    return Container(
-      margin: const EdgeInsets.all(12),
-      padding: const EdgeInsets.all(12),
-      decoration: BoxDecoration(
-        border: Border.all(),
-        borderRadius: BorderRadius.circular(12),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            'Main Area (Shared Space)',
-            style: Theme.of(context).textTheme.titleMedium,
-          ),
-          const SizedBox(height: 8),
-          Text('MODE = $currentModeText'),
-          Text('WorkWorld (kept) = $workWorldText'),
-          Text('WorkWorld View (kept) = $activeViewText'),
-          const SizedBox(height: 12),
-          if (inWorldMode) ...[
-            const Divider(height: 1),
-            const SizedBox(height: 12),
-            Text(
-              'View in ${_worldLabel(currentWorld)} (same cue, display only)',
-              style: Theme.of(context).textTheme.bodyMedium,
-            ),
-            const SizedBox(height: 8),
-            Wrap(
-              spacing: 8,
-              children: [
-                ChoiceChip(
-                  label: const Text('Ch'),
-                  selected: ctxForCurrentWorld.view == WorldView.ch,
-                  onSelected: (_) => onSetWorldView(currentWorld, WorldView.ch),
-                ),
-                ChoiceChip(
-                  label: const Text('Fader'),
-                  selected: ctxForCurrentWorld.view == WorldView.fader,
-                  onSelected: (_) =>
-                      onSetWorldView(currentWorld, WorldView.fader),
-                ),
-              ],
-            ),
-          ] else ...[
-            const SizedBox(height: 12),
-            const Divider(height: 1),
-            const SizedBox(height: 12),
-            const Text(
-              'Effect/Sub/Setting: display moved, but WorkWorld is kept.',
-            ),
-          ],
-        ],
       ),
     );
   }
