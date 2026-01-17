@@ -4,6 +4,7 @@
 // Phase F1-4: モード色で「実行中モード」判別（暫定）
 // Phase F2-2: DeskShell state を DeskContextVM に集約（挙動維持）
 // Phase F2-3: 画面分割テンプレ導入 + Ch墓石スタブ建設
+// NOTE: F2-4d keypad layout lock（773e3ec）を守るため、Keypad配線は一旦しない。
 
 import 'dart:async';
 import 'package:flutter/material.dart';
@@ -25,6 +26,7 @@ class _DeskShellState extends State<DeskShell> {
     lastWorkWorld: WorkWorld.live,
     liveCtx: WorldContext(view: WorldView.fader),
     blindCtx: WorldContext(view: WorldView.ch),
+    cmdBufferText: '',
   );
 
   late final Timer _clockTimer;
@@ -56,8 +58,10 @@ class _DeskShellState extends State<DeskShell> {
   void _selectMode(DeskMode m) {
     setState(() {
       var next = vm.copyWith(mode: m);
-      if (m == DeskMode.live) next = next.copyWith(lastWorkWorld: WorkWorld.live);
-      if (m == DeskMode.blind) next = next.copyWith(lastWorkWorld: WorkWorld.blind);
+      if (m == DeskMode.live)
+        next = next.copyWith(lastWorkWorld: WorkWorld.live);
+      if (m == DeskMode.blind)
+        next = next.copyWith(lastWorkWorld: WorkWorld.blind);
       vm = next;
     });
   }
@@ -70,6 +74,36 @@ class _DeskShellState extends State<DeskShell> {
         vm = vm.copyWith(blindCtx: vm.blindCtx.copyWith(view: view));
       }
     });
+  }
+
+  // ===== CommandLine inputEcho (F2: 箱 + 表示だけ) =====
+  // NOTE: Keypad配線はF2-4d keypad lockを壊すため、ここでは未使用のまま残す。
+  void _appendCmdToken(String token) {
+    setState(() {
+      final t = token.trim();
+      if (t.isEmpty) return;
+      final current = vm.cmdBufferText.trim();
+      final next = current.isEmpty ? t : '$current $t';
+      vm = vm.copyWith(cmdBufferText: next);
+    });
+  }
+
+  void _backspaceCmd() {
+    setState(() {
+      final s = vm.cmdBufferText;
+      final trimmed = s.trimRight();
+      if (trimmed.isEmpty) {
+        vm = vm.copyWith(cmdBufferText: '');
+        return;
+      }
+      final lastSpace = trimmed.lastIndexOf(' ');
+      final next = (lastSpace < 0) ? '' : trimmed.substring(0, lastSpace);
+      vm = vm.copyWith(cmdBufferText: next);
+    });
+  }
+
+  void _clearCmd() {
+    setState(() => vm = vm.copyWith(cmdBufferText: ''));
   }
 
   @override
@@ -93,10 +127,11 @@ class _DeskShellState extends State<DeskShell> {
                 liveCtx: vm.liveCtx,
                 blindCtx: vm.blindCtx,
                 onSetWorldView: _setWorldView,
+                cmdBufferText: vm.cmdBufferText,
               ),
             ),
 
-            // Bottom: 10Key (stub)
+            // Bottom: Keypad (F2-4d keypad layout lockを維持するため、配線しない)
             const KeypadArea(),
           ],
         ),
@@ -132,18 +167,12 @@ class _TopBar extends StatelessWidget {
               alignment: Alignment.centerLeft,
               child: SingleChildScrollView(
                 scrollDirection: Axis.horizontal,
-                child: _ModeTabs(
-                  mode: mode,
-                  onSelect: onSelectMode,
-                ),
+                child: _ModeTabs(mode: mode, onSelect: onSelectMode),
               ),
             ),
           ),
           const SizedBox(width: 12),
-          _RightStatus(
-            clockText: clockText,
-            lastWorkWorld: lastWorkWorld,
-          ),
+          _RightStatus(clockText: clockText, lastWorkWorld: lastWorkWorld),
         ],
       ),
     );
@@ -160,10 +189,7 @@ class _LeftBrand extends StatelessWidget {
       children: const [
         Icon(Icons.theater_comedy, size: 18),
         SizedBox(width: 8),
-        Text(
-          'Kimix Desk',
-          style: TextStyle(fontWeight: FontWeight.bold),
-        ),
+        Text('Kimix Desk', style: TextStyle(fontWeight: FontWeight.bold)),
       ],
     );
   }
@@ -235,10 +261,7 @@ class _ModeTabs extends StatelessWidget {
         color: selected ? Colors.white : c,
       ),
       shape: StadiumBorder(
-        side: BorderSide(
-          color: c,
-          width: selected ? 2.0 : 1.0,
-        ),
+        side: BorderSide(color: c, width: selected ? 2.0 : 1.0),
       ),
       materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
       visualDensity: const VisualDensity(horizontal: -1, vertical: -1),
@@ -247,10 +270,7 @@ class _ModeTabs extends StatelessWidget {
 }
 
 class _RightStatus extends StatelessWidget {
-  const _RightStatus({
-    required this.clockText,
-    required this.lastWorkWorld,
-  });
+  const _RightStatus({required this.clockText, required this.lastWorkWorld});
 
   final String clockText;
   final WorkWorld lastWorkWorld;
@@ -277,10 +297,7 @@ class _RightStatus extends StatelessWidget {
         border: Border.all(),
         borderRadius: BorderRadius.circular(999),
       ),
-      child: Text(
-        text,
-        style: const TextStyle(fontSize: 12),
-      ),
+      child: Text(text, style: const TextStyle(fontSize: 12)),
     );
   }
 }

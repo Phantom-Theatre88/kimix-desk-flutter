@@ -13,23 +13,27 @@ class CueArea extends StatelessWidget {
     required this.enabled,
     required this.mode,
     required this.lastWorkWorld,
+    required this.cmdBufferText,
   });
 
   final bool enabled;
   final DeskMode mode;
   final WorkWorld lastWorkWorld;
 
+  /// CommandLine: inputEcho（生テキスト）
+  final String cmdBufferText;
+
   static const double _cmdHeight = 56.0;
   static const double _rowHeight = 40.0; // ✅ Kimロック(B)
   static const double _radius = 12.0;
 
   String get _modeLabel => switch (mode) {
-        DeskMode.live => 'Live',
-        DeskMode.blind => 'Blind',
-        DeskMode.effect => 'Effect',
-        DeskMode.sub => 'Sub',
-        DeskMode.setting => 'Setting',
-      };
+    DeskMode.live => 'Live',
+    DeskMode.blind => 'Blind',
+    DeskMode.effect => 'Effect',
+    DeskMode.sub => 'Sub',
+    DeskMode.setting => 'Setting',
+  };
 
   String get _wwLabel => (lastWorkWorld == WorkWorld.live) ? 'LIVE' : 'BLIND';
 
@@ -45,17 +49,12 @@ class CueArea extends StatelessWidget {
       child: Column(
         children: [
           // ===== CueList (main) =====
-          Expanded(
-            child: _cueListPanel(context),
-          ),
+          Expanded(child: _cueListPanel(context)),
 
           const SizedBox(height: 10),
 
           // ===== CommandLine (fixed) =====
-          SizedBox(
-            height: _cmdHeight,
-            child: _commandLine(context),
-          ),
+          SizedBox(height: _cmdHeight, child: _commandLine(context)),
         ],
       ),
     );
@@ -101,9 +100,7 @@ class CueArea extends StatelessWidget {
           const Divider(height: 1),
 
           // List (dense)
-          Expanded(
-            child: _cueListDense(context),
-          ),
+          Expanded(child: _cueListDense(context)),
         ],
       ),
     );
@@ -166,22 +163,16 @@ class CueArea extends StatelessWidget {
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
       child: Row(
         children: [
-          const Text(
-            'CMD:',
-            style: TextStyle(fontWeight: FontWeight.w900),
-          ),
+          const Text('CMD:', style: TextStyle(fontWeight: FontWeight.w900)),
           const SizedBox(width: 8),
-          const Expanded(
+          Expanded(
             child: Text(
-              '(input echo stub)  1 THRU 5 @ 50 ENTER',
+              cmdBufferText.isEmpty ? '' : cmdBufferText,
               overflow: TextOverflow.ellipsis,
             ),
           ),
           const SizedBox(width: 8),
-          Text(
-            'WW=$_wwLabel',
-            style: const TextStyle(fontSize: 12),
-          ),
+          Text('WW=$_wwLabel', style: const TextStyle(fontSize: 12)),
         ],
       ),
     );

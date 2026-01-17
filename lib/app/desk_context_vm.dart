@@ -5,25 +5,13 @@
 import 'package:flutter/foundation.dart';
 
 /// 大モード（全部モード移動）
-enum DeskMode {
-  live,
-  blind,
-  effect,
-  sub,
-  setting,
-}
+enum DeskMode { live, blind, effect, sub, setting }
 
 /// 作業文脈（Effect/Sub/Setting に行っても保持される）
-enum WorkWorld {
-  live,
-  blind,
-}
+enum WorkWorld { live, blind }
 
 /// Live/Blind 内の表示文脈（2択でロック）
-enum WorldView {
-  ch,
-  fader,
-}
+enum WorldView { ch, fader }
 
 @immutable
 class WorldContext {
@@ -44,6 +32,7 @@ class DeskContextVM {
     required this.lastWorkWorld,
     required this.liveCtx,
     required this.blindCtx,
+    required this.cmdBufferText,
   });
 
   final DeskMode mode;
@@ -51,17 +40,22 @@ class DeskContextVM {
   final WorldContext liveCtx;
   final WorldContext blindCtx;
 
+  /// CommandLine: inputEcho（生テキスト）。解釈は後工程。
+  final String cmdBufferText;
+
   DeskContextVM copyWith({
     DeskMode? mode,
     WorkWorld? lastWorkWorld,
     WorldContext? liveCtx,
     WorldContext? blindCtx,
+    String? cmdBufferText,
   }) {
     return DeskContextVM(
       mode: mode ?? this.mode,
       lastWorkWorld: lastWorkWorld ?? this.lastWorkWorld,
       liveCtx: liveCtx ?? this.liveCtx,
       blindCtx: blindCtx ?? this.blindCtx,
+      cmdBufferText: cmdBufferText ?? this.cmdBufferText,
     );
   }
 }

@@ -15,6 +15,7 @@ class DeskMainArea extends StatelessWidget {
     required this.liveCtx,
     required this.blindCtx,
     required this.onSetWorldView,
+    required this.cmdBufferText,
   });
 
   final DeskMode mode;
@@ -22,6 +23,7 @@ class DeskMainArea extends StatelessWidget {
   final WorldContext liveCtx;
   final WorldContext blindCtx;
   final void Function(WorkWorld world, WorldView view) onSetWorldView;
+  final String cmdBufferText;
 
   bool get _inWorkWorld => mode == DeskMode.live || mode == DeskMode.blind;
 
@@ -30,7 +32,8 @@ class DeskMainArea extends StatelessWidget {
     return WorkWorld.blind;
   }
 
-  WorldContext _ctxFor(WorkWorld w) => (w == WorkWorld.live) ? liveCtx : blindCtx;
+  WorldContext _ctxFor(WorkWorld w) =>
+      (w == WorkWorld.live) ? liveCtx : blindCtx;
 
   @override
   Widget build(BuildContext context) {
@@ -56,6 +59,7 @@ class DeskMainArea extends StatelessWidget {
               enabled: true,
               mode: mode,
               lastWorkWorld: lastWorkWorld,
+              cmdBufferText: cmdBufferText,
             ),
           ),
         ],
